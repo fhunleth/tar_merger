@@ -1,4 +1,7 @@
 defmodule TarMerger.TarReader do
+  @moduledoc false
+  # See https://pubs.opengroup.org/onlinepubs/9699919799/
+
   alias TarMerger.Entry
 
   @record_size 512
@@ -123,10 +126,10 @@ defmodule TarMerger.TarReader do
   defp typeflag_to_type(?0), do: :regular
   defp typeflag_to_type(?1), do: :hard_link
   defp typeflag_to_type(?2), do: :symlink
-  defp typeflag_to_type(?3), do: :device
-  defp typeflag_to_type(?4), do: :device
+  defp typeflag_to_type(?3), do: :character_device
+  defp typeflag_to_type(?4), do: :block_device
   defp typeflag_to_type(?5), do: :directory
-  defp typeflag_to_type(120), do: :pax_header
+  defp typeflag_to_type(?x), do: :pax_header
 
   defp parse_octal(str) do
     case trim_null(str) do

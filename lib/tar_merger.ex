@@ -45,4 +45,8 @@ defmodule TarMerger do
       tar_path
     ])
   end
+
+  def mkfs_squashfs(squashfs_path, entries) do
+    # mksquashfs squashfs-root "$output_squashfs" -pf pseudofile -sort "$squashfs_priorities" -noappend -no-recovery -no-progress $NERVES_MKSQUASHFS_FLAGS
+  end
 end

@@ -19,7 +19,7 @@ defmodule TarMerger.Entry do
   @type t() :: %__MODULE__{
           path: String.t(),
           contents: tuple(),
-          type: :device | :directory | :regular | :other | :symlink,
+          type: :block_device | :character_device | :directory | :regular | :other | :symlink,
           mode: non_neg_integer(),
           uid: non_neg_integer(),
           gid: non_neg_integer(),
@@ -58,10 +58,21 @@ defmodule TarMerger.Entry do
     }
   end
 
-  def device(path, info) do
+  def block_device(path, info) do
     %__MODULE__{
       path: normalize_path(path),
-      type: :device,
+      type: :block_device,
+      mode: Keyword.fetch!(info, :mode) |> normalize_mode(),
+      size: 0,
+      major_device: Keyword.fetch!(info, :major_device),
+      minor_device: Keyword.fetch!(info, :minor_device)
+    }
+  end
+
+  def character_device(path, info) do
+    %__MODULE__{
+      path: normalize_path(path),
+      type: :character_device,
       mode: Keyword.fetch!(info, :mode) |> normalize_mode(),
       size: 0,
       major_device: Keyword.fetch!(info, :major_device),
@@ -128,9 +139,23 @@ defmodule TarMerger.Entry do
       ])
     end
 
-    def inspect(%{type: :device} = entry, opts) do
+    def inspect(%{type: :block_device} = entry, opts) do
       concat([
-        "TarMerger.Entry.device(",
+        "TarMerger.Entry.block_device(",
+        Inspect.inspect(entry.path, opts),
+        ", mode: ",
+        Inspect.inspect(entry.mode, Map.put(opts, :base, :octal)),
+        ", major_device: ",
+        Inspect.inspect(entry.major_device, opts),
+        ", minor_device: ",
+        Inspect.inspect(entry.minor_device, opts),
+        ")"
+      ])
+    end
+
+    def inspect(%{type: :character_device} = entry, opts) do
+      concat([
+        "TarMerger.Entry.character_device(",
         Inspect.inspect(entry.path, opts),
         ", mode: ",
         Inspect.inspect(entry.mode, Map.put(opts, :base, :octal)),

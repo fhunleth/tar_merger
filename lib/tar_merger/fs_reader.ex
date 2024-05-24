@@ -65,12 +65,4 @@ defmodule TarMerger.FSReader do
       link: File.read_link!(path)
     )
   end
-
-  defp to_entry(path, prefix, %File.Stat{type: :device} = stat) do
-    Entry.device(trim_prefix(path, prefix),
-      mode: stat.mode,
-      major_device: stat.major_device,
-      minor_device: stat.minor_device
-    )
-  end
 end

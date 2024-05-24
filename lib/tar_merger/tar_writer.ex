@@ -119,6 +119,7 @@ defmodule TarMerger.TarWriter do
   defp type_to_typeflag(:regular), do: ?0
   defp type_to_typeflag(:hard_link), do: ?1
   defp type_to_typeflag(:symlink), do: ?2
-  defp type_to_typeflag(:device), do: ?3
+  defp type_to_typeflag(:character_device), do: ?3
+  defp type_to_typeflag(:block_device), do: ?4
   defp type_to_typeflag(:directory), do: ?5
 end

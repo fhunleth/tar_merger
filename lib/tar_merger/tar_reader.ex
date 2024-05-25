@@ -6,6 +6,7 @@ defmodule TarMerger.TarReader do
 
   @record_size 512
 
+  @spec read_tar(Path.t()) :: [Entry.t()]
   def read_tar(tar_path) do
     File.open!(tar_path, [:read], fn file ->
       parse_tar_entries(file, tar_path, 0, [])
@@ -46,13 +47,13 @@ defmodule TarMerger.TarReader do
           |> update_entry_from_pax(pax_header)
 
         next_offset = next_offset + round_to_record(entry.size)
-        :file.position(file, next_offset)
+        {:ok, _} = :file.position(file, next_offset)
         {entry, next_offset}
 
       %{size: size} = entry ->
         # Skip over the file contents.
         next_offset = next_offset + round_to_record(size)
-        :file.position(file, next_offset)
+        {:ok, _} = :file.position(file, next_offset)
         {entry, next_offset}
     end
   end
@@ -67,12 +68,8 @@ defmodule TarMerger.TarReader do
   @pax_line ~r/^(\d+)\s+(\w+)=(\w+)$/
   defp parse_pax_line(line, entry) do
     case Regex.run(@pax_line, line) do
-      [_, _length, key, value] ->
-        if key not in ["atime", "ctime"], do: IO.inspect(line)
-        pax_update_entry(entry, key, value)
-
-      _ ->
-        entry
+      [_, _length, key, value] -> pax_update_entry(entry, key, value)
+      _ -> entry
     end
   end
 

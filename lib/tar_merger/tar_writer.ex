@@ -1,6 +1,8 @@
 defmodule TarMerger.TarWriter do
+  @moduledoc false
   alias TarMerger.Entry
 
+  @spec write_tar(Path.t(), [Entry.t()]) :: :ok
   def write_tar(path, entry_list) when is_binary(path) and is_list(entry_list) do
     File.open!(path, [:write], fn file -> write_entries(file, entry_list) end)
   end
@@ -12,7 +14,7 @@ defmodule TarMerger.TarWriter do
 
   defp write_entries(file, [entry | next]) when is_struct(entry) do
     write_header(file, entry)
-    write_data(file, entry)
+    :ok = write_data(file, entry)
     write_entries(file, next)
   end
 
@@ -93,12 +95,15 @@ defmodule TarMerger.TarWriter do
     end
   end
 
+  @spec padding_field(non_neg_integer) :: binary()
   def padding_field(length), do: <<0::integer-size(length)-unit(8)>>
 
+  @spec string_field(String.t(), non_neg_integer) :: binary()
   def string_field(str, length) when is_binary(str), do: zero_pad(str, length)
 
-  def octal_field(number, length, number_length \\ nil) when is_integer(number) do
-    number_length = number_length || length - 1
+  @spec octal_field(non_neg_integer, non_neg_integer) :: iolist()
+  def octal_field(number, length) when is_integer(number) do
+    number_length = length - 1
     octal = :io_lib.format("~#{number_length}.8.0B", [number])
 
     # Trying to match what GNU tar does which makes sense when reading the spec
@@ -109,6 +114,7 @@ defmodule TarMerger.TarWriter do
     end
   end
 
+  @spec zero_pad(String.t(), non_neg_integer) :: binary()
   def zero_pad(str, length) when is_binary(str) and is_integer(length) do
     str_size = min(byte_size(str), length)
     pad_amount = length - str_size

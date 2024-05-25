@@ -13,15 +13,21 @@ defmodule TarMerger do
   ```
   """
 
+  alias TarMerger.Entry
+  alias TarMerger.EROFS
   alias TarMerger.FSReader
+  alias TarMerger.SquashFS
   alias TarMerger.TarReader
   alias TarMerger.TarWriter
+
+  @type entries() :: [Entry.t()]
 
   defdelegate scan_directory(path), to: FSReader
 
   defdelegate read_tar(path), to: TarReader
   defdelegate write_tar(path, entries), to: TarWriter
 
+  @spec merge([entries()]) :: entries()
   def merge(entries_list) when is_list(entries_list) do
     # TODO remove duplicates
     entries_list
@@ -32,21 +38,7 @@ defmodule TarMerger do
   @doc """
   Create an EROFS image out of the specified entries
   """
-  def mkfs_erofs(erofs_path, entries) do
-    tar_path = erofs_path <> ".tar"
-    write_tar(tar_path, entries)
+  defdelegate mkfs_erofs(erofs_path, entries, options \\ []), to: EROFS
 
-    System.cmd("mkfs.erofs", [
-      "-zlz4hc",
-      "-U",
-      "00000000-0000-0000-0000-000000000000",
-      "--tar",
-      erofs_path,
-      tar_path
-    ])
-  end
-
-  def mkfs_squashfs(_squashfs_path, _entries) do
-    # mksquashfs squashfs-root "$output_squashfs" -pf pseudofile -sort "$squashfs_priorities" -noappend -no-recovery -no-progress $NERVES_MKSQUASHFS_FLAGS
-  end
+  defdelegate mkfs_squashfs(squashfs_path, entries, options \\ []), to: SquashFS
 end

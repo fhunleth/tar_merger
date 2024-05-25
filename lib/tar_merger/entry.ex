@@ -18,7 +18,7 @@ defmodule TarMerger.Entry do
 
   @type t() :: %__MODULE__{
           path: String.t(),
-          contents: tuple(),
+          contents: nil | {Path.t(), non_neg_integer},
           type: :block_device | :character_device | :directory | :regular | :other | :symlink,
           mode: non_neg_integer(),
           uid: non_neg_integer(),
@@ -30,6 +30,7 @@ defmodule TarMerger.Entry do
           minor_device: non_neg_integer()
         }
 
+  @spec regular(String.t(), keyword()) :: t()
   def regular(path, info) do
     %__MODULE__{
       path: normalize_path(path),
@@ -40,6 +41,7 @@ defmodule TarMerger.Entry do
     }
   end
 
+  @spec directory(String.t(), keyword()) :: t()
   def directory(path, info) do
     %__MODULE__{
       path: path |> normalize_path() |> normalize_dir(),
@@ -48,6 +50,7 @@ defmodule TarMerger.Entry do
     }
   end
 
+  @spec symlink(String.t(), keyword()) :: t()
   def symlink(path, info) do
     %__MODULE__{
       path: normalize_path(path),
@@ -58,6 +61,7 @@ defmodule TarMerger.Entry do
     }
   end
 
+  @spec block_device(String.t(), keyword()) :: t()
   def block_device(path, info) do
     %__MODULE__{
       path: normalize_path(path),
@@ -69,6 +73,7 @@ defmodule TarMerger.Entry do
     }
   end
 
+  @spec character_device(String.t(), keyword()) :: t()
   def character_device(path, info) do
     %__MODULE__{
       path: normalize_path(path),
@@ -103,6 +108,7 @@ defmodule TarMerger.Entry do
   defimpl Inspect do
     import Inspect.Algebra
 
+    @impl Inspect
     def inspect(%{type: :regular} = entry, opts) do
       concat([
         "TarMerger.Entry.regular(",

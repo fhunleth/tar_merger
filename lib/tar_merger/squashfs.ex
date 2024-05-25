@@ -1,29 +1,71 @@
 defmodule TarMerger.SquashFS do
+  @moduledoc false
+  import TarMerger.Util
   alias TarMerger.Entry
 
-  @spec pseudofile([Entry.t()]) :: iolist()
-  def pseudofile(entries) when is_list(entries) do
-    Enum.map(entries, &pseudofile_line/1)
+  @type options() :: [tmp_dir: Path.t(), mksquashfs_options: [String.t()]]
+
+  @spec mkfs_squashfs(Path.t(), [Entry.t()], options()) :: :ok | :error
+  def mkfs_squashfs(squashfs_path, entries, options \\ []) when is_list(entries) do
+    tmp_dir = Keyword.get_lazy(options, :tmp_dir, &System.tmp_dir!/0)
+    mksquashfs_options = Keyword.get(options, :mksquashfs_options, [])
+
+    pseudo_file_path = Path.join(tmp_dir, "pseudo-file")
+    sort_file_path = Path.join(tmp_dir, "sort-file")
+    squashfs_root = Path.join(tmp_dir, "rootfs")
+
+    File.write!(pseudo_file_path, pseudo_file(entries))
+    File.write!(sort_file_path, sort_file(entries))
+    _ = File.rm_rf!(squashfs_root)
+    File.mkdir!(squashfs_root)
+    write_input_tree(squashfs_root, entries)
+
+    cmd("mksquashfs", [
+      squashfs_root,
+      squashfs_path,
+      "-pf",
+      pseudo_file_path,
+      "-sort",
+      sort_file_path,
+      "-noappend",
+      "-no-recovery",
+      "-no-progress" | mksquashfs_options
+    ])
+  after
   end
 
-  defp pseudofile_line(entry) do
+  @spec pseudo_file([Entry.t()]) :: iolist()
+  def pseudo_file(entries) when is_list(entries) do
+    Enum.map(entries, &pseudo_file_line/1)
+  end
+
+  defp pseudo_file_line(entry) do
+    path = remove_tar_dot(entry.path)
+
     case entry.type do
       :block_device ->
-        "#{entry.path} b #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.major_device} #{entry.minor_device}\n"
+        "#{path} b #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.major_device} #{entry.minor_device}\n"
 
       :character_device ->
-        "#{entry.path} c #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.major_device} #{entry.minor_device}\n"
+        "#{path} c #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.major_device} #{entry.minor_device}\n"
 
       :directory ->
-        "#{entry.path} d #{octal(entry.mode)} #{entry.uid} #{entry.gid}\n"
+        if path != "/" do
+          "#{path} m #{octal(entry.mode)} #{entry.uid} #{entry.gid}\n"
+        else
+          # mksquashfs gives a warning if you don't skip this.
+          ""
+        end
 
       :regular ->
-        "#{entry.path} m #{octal(entry.mode)} #{entry.uid} #{entry.gid}\n"
+        "#{path} m #{octal(entry.mode)} #{entry.uid} #{entry.gid}\n"
 
       :symlink ->
-        "#{entry.path} s #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.link}\n"
+        "#{path} s #{octal(entry.mode)} #{entry.uid} #{entry.gid} #{entry.link}\n"
     end
   end
+
+  defp remove_tar_dot("." <> path), do: path
 
   @spec write_input_tree(Path.t(), [Entry.t()]) :: :ok
   def write_input_tree(path, entries) when is_list(entries) do
@@ -41,7 +83,7 @@ defmodule TarMerger.SquashFS do
 
   defp write_entry(path, %{type: :directory} = entry) do
     output_path = Path.join(path, entry.path)
-    File.mkdir!(output_path)
+    File.mkdir_p!(output_path)
   end
 
   defp write_entry(_path, _entry), do: :ok
@@ -55,12 +97,12 @@ defmodule TarMerger.SquashFS do
     Enum.reverse(acc)
   end
 
-  defp sort_file_line([entry | rest], counter, acc) do
-    if entry.type == :regular do
-      sort_file_line(rest, counter + 1, ["#{entry.path} #{counter}\n" | acc])
-    else
-      sort_file_line(rest, counter, acc)
-    end
+  defp sort_file_line([%{type: :regular, contents: {path, _offset}} | rest], counter, acc) do
+    sort_file_line(rest, counter + 1, ["#{path} #{counter}\n" | acc])
+  end
+
+  defp sort_file_line([_entry | rest], counter, acc) do
+    sort_file_line(rest, counter, acc)
   end
 
   defp octal(num), do: Integer.to_string(num, 8)

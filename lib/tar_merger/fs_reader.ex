@@ -1,6 +1,8 @@
 defmodule TarMerger.FSReader do
+  @moduledoc false
   alias TarMerger.Entry
 
+  @spec scan_directory(Path.t()) :: [Entry.t()]
   def scan_directory(path) do
     prefix = normalize_dir(path)
 

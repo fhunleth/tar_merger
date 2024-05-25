@@ -14,7 +14,7 @@ defmodule TarMerger.TarWriter do
 
   defp write_entries(file, [entry | next]) when is_struct(entry) do
     write_header(file, entry)
-    :ok = write_data(file, entry)
+    write_data(file, entry)
     write_entries(file, next)
   end
 
@@ -69,13 +69,16 @@ defmodule TarMerger.TarWriter do
   end
 
   defp write_data(file, %Entry{contents: {path, offset}, size: size}) do
-    File.open(path, [:read], fn f ->
-      {:ok, data} = :file.pread(f, offset, size)
+    {:ok, :ok} =
+      File.open(path, [:read], fn f ->
+        {:ok, data} = :file.pread(f, offset, size)
 
-      fragment = rem(size, 512)
-      padding = if fragment == 0, do: <<>>, else: padding_field(512 - fragment)
-      IO.binwrite(file, [data, padding])
-    end)
+        fragment = rem(size, 512)
+        padding = if fragment == 0, do: <<>>, else: padding_field(512 - fragment)
+        IO.binwrite(file, [data, padding])
+      end)
+
+    :ok
   end
 
   defp write_data(_file, _entry) do

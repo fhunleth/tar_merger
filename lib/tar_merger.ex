@@ -9,7 +9,9 @@ defmodule TarMerger do
   iex> x=TarMerger.read_tar("./rootfs.tar"); :ok
   :ok
   iex> TarMerger.mkfs_erofs("test.erofs", x)
-  # Look for the test.erofs file on disk
+  # Look for the test.erofs file in the current directory
+  iex> TarMerger.mkfs_squashfs("test.sqfs", x)
+  # Look for the test.sqfs file in the current directory
   ```
   """
 

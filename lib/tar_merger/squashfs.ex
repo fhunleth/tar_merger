@@ -3,12 +3,16 @@ defmodule TarMerger.SquashFS do
   import TarMerger.Util
   alias TarMerger.Entry
 
-  @type options() :: [tmp_dir: Path.t(), mksquashfs_options: [String.t()]]
+  @type options() :: [
+          tmp_dir: Path.t(),
+          mksquashfs_options: [String.t()],
+          compressor: :gzip | :lzo | :lz4 | :zstd
+        ]
 
   @spec mkfs_squashfs(Path.t(), [Entry.t()], options()) :: :ok | :error
   def mkfs_squashfs(squashfs_path, entries, options \\ []) when is_list(entries) do
     tmp_dir = Keyword.get_lazy(options, :tmp_dir, &System.tmp_dir!/0)
-    mksquashfs_options = Keyword.get(options, :mksquashfs_options, [])
+    extra_options = Keyword.get(options, :mksquashfs_options, [])
 
     pseudo_file_path = Path.join(tmp_dir, "pseudo-file")
     sort_file_path = Path.join(tmp_dir, "sort-file")
@@ -20,18 +24,39 @@ defmodule TarMerger.SquashFS do
     File.mkdir!(squashfs_root)
     write_input_tree(squashfs_root, entries)
 
-    cmd("mksquashfs", [
-      squashfs_root,
-      squashfs_path,
-      "-pf",
-      pseudo_file_path,
-      "-sort",
-      sort_file_path,
-      "-noappend",
-      "-no-recovery",
-      "-no-progress" | mksquashfs_options
-    ])
+    cmd(
+      "mksquashfs",
+      [
+        squashfs_root,
+        squashfs_path,
+        "-pf",
+        pseudo_file_path,
+        "-sort",
+        sort_file_path,
+        "-noappend",
+        "-no-recovery",
+        "-no-progress"
+      ] ++ mksquashfs_options(options) ++ extra_options
+    )
   after
+  end
+
+  defp mksquashfs_options(options) do
+    [
+      compressor_options(options)
+    ]
+    |> List.flatten()
+  end
+
+  defp compressor_options(options) do
+    case Keyword.fetch(options, :compressor) do
+      {:ok, :gzip} -> ["-comp", "gzip"]
+      {:ok, :lzo} -> ["-comp", "lzo"]
+      {:ok, :lz4} -> ["-comp", "lz4"]
+      {:ok, :zstd} -> ["-comp", "zstd"]
+      {:ok, other} -> raise ArgumentError, "Don't know #{inspect(other)} compressor"
+      :error -> ["-comp", "gzip"]
+    end
   end
 
   @spec pseudo_file([Entry.t()]) :: iolist()

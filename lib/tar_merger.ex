@@ -24,17 +24,55 @@ defmodule TarMerger do
 
   @type entries() :: [Entry.t()]
 
+  @spec run_example() :: :ok
+  def run_example() do
+    system = TarMerger.read_tar("./rootfs.tar") |> sort()
+
+    TarMerger.mkfs_erofs("test.erofs", system)
+    TarMerger.mkfs_squashfs("test.sqfs", system)
+  end
+
   defdelegate scan_directory(path), to: FSReader
 
   defdelegate read_tar(path), to: TarReader
   defdelegate write_tar(path, entries), to: TarWriter
 
+  @doc """
+  Merge multiple sets of files together
+
+  In the case of duplicates, first entry wins, so order the file sets from
+  highest priority to lowest.
+  """
   @spec merge([entries()]) :: entries()
   def merge(entries_list) when is_list(entries_list) do
-    # TODO remove duplicates
     entries_list
-    # |> List.concat()
-    # |> Enum.sort()
+    |> Enum.concat()
+    |> Enum.uniq_by(fn entry -> entry.path end)
+  end
+
+  @doc """
+  Sort the entries
+  """
+  @spec sort(entries()) :: entries()
+  def sort(entries) do
+    entries
+    |> Enum.sort(&dirs_first_then_alpha/2)
+  end
+
+  defp dirs_first_then_alpha(a, b) do
+    if a.type == :directory do
+      if b.type == :directory do
+        a.path <= b.path
+      else
+        true
+      end
+    else
+      if b.type == :directory do
+        false
+      else
+        a.path <= b.path
+      end
+    end
   end
 
   @doc """

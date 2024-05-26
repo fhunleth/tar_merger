@@ -35,7 +35,9 @@ defmodule TarMerger.SquashFS do
         sort_file_path,
         "-noappend",
         "-no-recovery",
-        "-no-progress"
+        "-no-progress",
+        "-xattrs-exclude",
+        "com.apple.provenance"
       ] ++ mksquashfs_options(options) ++ extra_options
     )
   after
@@ -113,21 +115,30 @@ defmodule TarMerger.SquashFS do
 
   defp write_entry(_path, _entry), do: :ok
 
-  @spec sort_file([Entry.t()]) :: [String.t()]
-  def sort_file(entries) when is_list(entries) do
-    sort_file_line(entries, -32768, [])
+  @spec sort_file([Entry.t()], keyword()) :: [String.t()]
+  def sort_file(entries, options \\ []) when is_list(entries) do
+    tmp_dir = Keyword.get_lazy(options, :tmp_dir, &System.tmp_dir!/0)
+    squashfs_root = Path.join(tmp_dir, "rootfs")
+
+    sort_file_line(entries, squashfs_root, -32768, [])
   end
 
-  defp sort_file_line([], _counter, acc) do
+  defp sort_file_line([], _squashfs_root, _counter, acc) do
     Enum.reverse(acc)
   end
 
-  defp sort_file_line([%{type: :regular, contents: {path, _offset}} | rest], counter, acc) do
-    sort_file_line(rest, counter + 1, ["#{path} #{counter}\n" | acc])
+  defp sort_file_line([%{type: :regular} = entry | rest], squashfs_root, counter, acc) do
+    path =
+      case entry.contents do
+        {file_path, 0} -> file_path
+        _ -> Path.join(squashfs_root, entry.path)
+      end
+
+    sort_file_line(rest, squashfs_root, counter + 1, ["#{path} #{counter}\n" | acc])
   end
 
-  defp sort_file_line([_entry | rest], counter, acc) do
-    sort_file_line(rest, counter, acc)
+  defp sort_file_line([_entry | rest], squashfs_root, counter, acc) do
+    sort_file_line(rest, squashfs_root, counter, acc)
   end
 
   defp octal(num), do: Integer.to_string(num, 8)

@@ -2,18 +2,19 @@ defmodule TarMerger.FSReader do
   @moduledoc false
   alias TarMerger.Entry
 
-  @spec scan_directory(Path.t()) :: [Entry.t()]
-  def scan_directory(path) do
+  @spec scan_directory(Path.t(), Path.t()) :: [Entry.t()]
+  def scan_directory(path, root \\ "/") do
     prefix = normalize_dir(path)
+    root = normalize_dir(root)
 
-    scan_directory(ls!(path), prefix, [])
+    scan_directory(ls!(path), prefix, root, [])
   end
 
-  defp scan_directory([], _prefix, acc) do
+  defp scan_directory([], _prefix, _root, acc) do
     Enum.reverse(acc)
   end
 
-  defp scan_directory([path | rest], prefix, acc) do
+  defp scan_directory([path | rest], prefix, root, acc) do
     {stat, new_rest} =
       case File.lstat!(path) do
         %{type: :directory} = stat ->
@@ -23,8 +24,8 @@ defmodule TarMerger.FSReader do
           {stat, rest}
       end
 
-    entry = to_entry(path, prefix, stat)
-    scan_directory(new_rest, prefix, [entry | acc])
+    entry = to_entry(path, prefix, root, stat)
+    scan_directory(new_rest, prefix, root, [entry | acc])
   end
 
   defp ls!(path) do
@@ -40,29 +41,24 @@ defmodule TarMerger.FSReader do
     end
   end
 
-  defp trim_prefix(original, prefix) do
-    prefix_size = byte_size(prefix)
-
-    case original do
-      <<^prefix::binary-size(prefix_size), rest::binary>> -> rest
-      _ -> original
-    end
+  defp target_path(original, prefix, root) do
+    String.replace(original, prefix, root)
   end
 
-  defp to_entry(path, prefix, %File.Stat{type: :regular} = stat) do
-    Entry.regular(trim_prefix(path, prefix),
+  defp to_entry(path, prefix, root, %File.Stat{type: :regular} = stat) do
+    Entry.regular(target_path(path, prefix, root),
       contents: {Path.absname(path), 0},
       mode: stat.mode,
       size: stat.size
     )
   end
 
-  defp to_entry(path, prefix, %File.Stat{type: :directory} = stat) do
-    Entry.directory(trim_prefix(path, prefix), mode: stat.mode)
+  defp to_entry(path, prefix, root, %File.Stat{type: :directory} = stat) do
+    Entry.directory(target_path(path, prefix, root), mode: stat.mode)
   end
 
-  defp to_entry(path, prefix, %File.Stat{type: :symlink} = stat) do
-    Entry.symlink(trim_prefix(path, prefix),
+  defp to_entry(path, prefix, root, %File.Stat{type: :symlink} = stat) do
+    Entry.symlink(target_path(path, prefix, root),
       mode: stat.mode,
       link: File.read_link!(path)
     )

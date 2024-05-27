@@ -32,7 +32,7 @@ defmodule TarMerger do
     TarMerger.mkfs_squashfs("test.sqfs", system)
   end
 
-  defdelegate scan_directory(path), to: FSReader
+  defdelegate scan_directory(path, root \\ "/"), to: FSReader
 
   defdelegate read_tar(path), to: TarReader
   defdelegate write_tar(path, entries), to: TarWriter
@@ -46,7 +46,7 @@ defmodule TarMerger do
   @spec merge([entries()]) :: entries()
   def merge(entries_list) when is_list(entries_list) do
     entries_list
-    |> Enum.concat()
+    |> List.flatten()
     |> Enum.uniq_by(fn entry -> entry.path end)
   end
 

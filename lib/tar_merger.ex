@@ -28,8 +28,11 @@ defmodule TarMerger do
   def run_example() do
     system = TarMerger.read_tar("./rootfs.tar") |> sort()
 
+    IO.puts("Creating EROFS")
     TarMerger.mkfs_erofs("test.erofs", system)
+    IO.puts("Creating SquashFS")
     TarMerger.mkfs_squashfs("test.sqfs", system)
+    IO.puts("Done")
   end
 
   defdelegate scan_directory(path, root \\ "/"), to: FSReader

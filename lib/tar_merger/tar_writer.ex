@@ -4,18 +4,19 @@ defmodule TarMerger.TarWriter do
 
   @spec write_tar(Path.t(), [Entry.t()]) :: :ok
   def write_tar(path, entry_list) when is_binary(path) and is_list(entry_list) do
-    File.open!(path, [:write], fn file -> write_entries(file, entry_list) end)
+    File.open!(path, [:write], fn file -> write(file, entry_list) end)
   end
 
-  defp write_entries(file, []) do
+  @spec write(File.iodevice(), [Entry.t()]) :: :ok
+  def write(out_device, []) do
     # The end marker is 2 empty 512-byte blocks
-    :ok = IO.binwrite(file, padding_field(1024))
+    :ok = IO.binwrite(out_device, padding_field(1024))
   end
 
-  defp write_entries(file, [entry | next]) when is_struct(entry) do
-    write_header(file, entry)
-    write_data(file, entry)
-    write_entries(file, next)
+  def write(out_device, [entry | next]) when is_struct(entry) do
+    write_header(out_device, entry)
+    write_data(out_device, entry)
+    write(out_device, next)
   end
 
   # struct posix_header
@@ -38,7 +39,7 @@ defmodule TarMerger.TarWriter do
   #   char prefix[155];             /* 345 */
   #                                 /* 500 */
   # };
-  defp write_header(file, %Entry{} = entry) do
+  defp write_header(out_device, %Entry{} = entry) do
     header1 =
       [
         string_field(entry.path, 100),
@@ -65,24 +66,34 @@ defmodule TarMerger.TarWriter do
       |> IO.iodata_to_binary()
 
     cksum = calculate_checksum(header1, header2)
-    :ok = IO.binwrite(file, [header1, octal_field(cksum, 8), header2, padding_field(12)])
+    :ok = IO.binwrite(out_device, [header1, octal_field(cksum, 8), header2, padding_field(12)])
   end
 
-  defp write_data(file, %Entry{contents: {path, offset}, size: size}) do
+  defp write_data(out_device, %Entry{contents: contents, size: size}) do
+    write_contents(out_device, contents, size)
+
+    fragment = rem(size, 512)
+    padding = if fragment == 0, do: <<>>, else: padding_field(512 - fragment)
+    IO.binwrite(out_device, padding)
+  end
+
+  defp write_data(_file, _entry) do
+    :ok
+  end
+
+  defp write_contents(out_device, {path, offset}, size) when is_binary(path) do
     {:ok, :ok} =
       File.open(path, [:read], fn f ->
         {:ok, data} = :file.pread(f, offset, size)
-
-        fragment = rem(size, 512)
-        padding = if fragment == 0, do: <<>>, else: padding_field(512 - fragment)
-        IO.binwrite(file, [data, padding])
+        IO.binwrite(out_device, data)
       end)
 
     :ok
   end
 
-  defp write_data(_file, _entry) do
-    :ok
+  defp write_contents(out_device, {in_device, offset}, size) do
+    {:ok, data} = :file.pread(in_device, offset, size)
+    IO.binwrite(out_device, data)
   end
 
   defp calculate_checksum(part1, part2) do

@@ -8,13 +8,13 @@ defmodule TarMerger.TarReader do
 
   @spec read_tar(Path.t()) :: [Entry.t()]
   def read_tar(tar_path) do
-    File.open!(tar_path, [:read], fn file ->
-      # Parse the entries, but reject the normal `./` entry that doesn't get
-      # used in the output filesystems. `./` also causes sqfstar warnings.
-      parse_tar_entries(file, tar_path, 0, [])
-      |> Enum.reverse()
-      |> Enum.reject(fn entry -> entry.path == "./" end)
-    end)
+    file = File.open!(tar_path, [:read])
+
+    # Parse the entries, but reject the normal `./` entry that doesn't get
+    # used in the output filesystems. `./` also causes sqfstar warnings.
+    parse_tar_entries(file, tar_path, 0, [])
+    |> Enum.reverse()
+    |> Enum.reject(fn entry -> entry.path == "./" end)
   end
 
   defp parse_tar_entries(file, tar_path, next_offset, acc) do
@@ -27,7 +27,7 @@ defmodule TarMerger.TarReader do
 
       header_block when byte_size(header_block) == @record_size ->
         {entry, next_offset} =
-          read_entry(file, tar_path, header_block, next_offset + @record_size)
+          read_entry(file, header_block, next_offset + @record_size)
 
         parse_tar_entries(file, tar_path, next_offset, [entry | acc])
 
@@ -38,8 +38,8 @@ defmodule TarMerger.TarReader do
 
   defp round_to_record(value), do: div(value + @record_size - 1, @record_size) * @record_size
 
-  defp read_entry(file, tar_path, header_block, next_offset) do
-    case parse_header(tar_path, header_block, next_offset) do
+  defp read_entry(file, header_block, next_offset) do
+    case parse_header(file, header_block, next_offset) do
       %{type: :pax_header, size: pax_size} ->
         rounded_pax_size = round_to_record(pax_size)
         pax_header = IO.binread(file, rounded_pax_size)
@@ -47,7 +47,7 @@ defmodule TarMerger.TarReader do
         next_offset = next_offset + rounded_pax_size + @record_size
 
         entry =
-          parse_header(tar_path, real_header_block, next_offset)
+          parse_header(file, real_header_block, next_offset)
           |> update_entry_from_pax(pax_header)
 
         next_offset = next_offset + round_to_record(entry.size)
@@ -102,7 +102,7 @@ defmodule TarMerger.TarReader do
   #                                 /* 500 */
   # };
   @magic "ustar\0"
-  defp parse_header(tar_path, header_block, next_offset) do
+  defp parse_header(tar_device, header_block, next_offset) do
     <<filename::100-bytes, mode::8-bytes, uid::8-bytes, gid::8-bytes, size::12-bytes,
       mtime::12-bytes, _chksum::8-bytes, typeflag, linkname::100-bytes, @magic::binary,
       _version::2-bytes, _uname::32-bytes, _gname::32-bytes, major_device::8-bytes,
@@ -110,7 +110,7 @@ defmodule TarMerger.TarReader do
 
     %Entry{
       path: trim_null(prefix) <> trim_null(filename),
-      contents: {tar_path, next_offset},
+      contents: {tar_device, next_offset},
       type: typeflag_to_type(typeflag),
       mode: parse_octal(mode),
       uid: parse_octal(uid),

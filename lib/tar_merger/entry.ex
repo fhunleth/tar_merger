@@ -18,7 +18,7 @@ defmodule TarMerger.Entry do
 
   @type t() :: %__MODULE__{
           path: String.t(),
-          contents: nil | {Path.t(), non_neg_integer},
+          contents: nil | {Path.t(), non_neg_integer()} | {File.iodevice(), non_neg_integer()},
           type: :block_device | :character_device | :directory | :regular | :other | :symlink,
           mode: non_neg_integer(),
           uid: non_neg_integer(),

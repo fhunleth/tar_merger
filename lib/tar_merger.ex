@@ -26,13 +26,17 @@ defmodule TarMerger do
 
   @spec run_example() :: :ok
   def run_example() do
+    tmp_dir = Path.join(System.tmp_dir!(), "tar_merger")
+    File.mkdir_p!(tmp_dir)
+
     system = TarMerger.read_tar("./rootfs.tar") |> sort()
 
     IO.puts("Creating EROFS")
-    TarMerger.mkfs_erofs("test.erofs", system)
+    TarMerger.mkfs_erofs("test.erofs", system, tmp_dir: tmp_dir)
     IO.puts("Creating SquashFS")
-    TarMerger.mkfs_squashfs("test.sqfs", system)
+    TarMerger.mkfs_squashfs("test.sqfs", system, tmp_dir: tmp_dir)
     IO.puts("Done")
+    File.rm_rf!(tmp_dir)
   end
 
   defdelegate scan_directory(path, root \\ "/"), to: FSReader

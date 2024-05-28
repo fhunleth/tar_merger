@@ -9,7 +9,11 @@ defmodule TarMerger.TarReader do
   @spec read_tar(Path.t()) :: [Entry.t()]
   def read_tar(tar_path) do
     File.open!(tar_path, [:read], fn file ->
+      # Parse the entries, but reject the normal `./` entry that doesn't get
+      # used in the output filesystems. `./` also causes sqfstar warnings.
       parse_tar_entries(file, tar_path, 0, [])
+      |> Enum.reverse()
+      |> Enum.reject(fn entry -> entry.path == "./" end)
     end)
   end
 
@@ -19,7 +23,7 @@ defmodule TarMerger.TarReader do
         {:error, reason}
 
       <<0::integer-size(4096)>> ->
-        Enum.reverse(acc)
+        acc
 
       header_block when byte_size(header_block) == @record_size ->
         {entry, next_offset} =

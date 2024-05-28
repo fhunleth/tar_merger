@@ -18,7 +18,7 @@ defmodule TarMerger do
   alias TarMerger.Entry
   alias TarMerger.EROFS
   alias TarMerger.FSReader
-  alias TarMerger.SquashFS
+  alias TarMerger.SquashFS2
   alias TarMerger.TarReader
   alias TarMerger.TarWriter
 
@@ -80,5 +80,5 @@ defmodule TarMerger do
   """
   defdelegate mkfs_erofs(erofs_path, entries, options \\ []), to: EROFS
 
-  defdelegate mkfs_squashfs(squashfs_path, entries, options \\ []), to: SquashFS
+  defdelegate mkfs_squashfs(squashfs_path, entries, options \\ []), to: SquashFS2
 end

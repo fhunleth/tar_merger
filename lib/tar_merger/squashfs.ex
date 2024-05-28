@@ -40,7 +40,6 @@ defmodule TarMerger.SquashFS do
         "com.apple.provenance"
       ] ++ mksquashfs_options(options) ++ extra_options
     )
-  after
   end
 
   defp mksquashfs_options(options) do

@@ -13,7 +13,7 @@ defmodule TarMerger.TarReader do
     # Parse the entries, but reject the normal `./` entry that doesn't get
     # used in the output filesystems. `./` also causes sqfstar warnings.
     parse_tar_entries(file, tar_path, 0, [])
-    |> Enum.reverse()
+    |> resolve_long_names([])
     |> Enum.reject(fn entry -> entry.path == "./" end)
   end
 
@@ -101,12 +101,19 @@ defmodule TarMerger.TarReader do
   #   char prefix[155];             /* 345 */
   #                                 /* 500 */
   # };
-  @magic "ustar\0"
+
+  # null and space are used interchangeably by different implementations
+  @magic ["ustar\0", "ustar "]
+
   defp parse_header(tar_device, header_block, next_offset) do
     <<filename::100-bytes, mode::8-bytes, uid::8-bytes, gid::8-bytes, size::12-bytes,
-      mtime::12-bytes, _chksum::8-bytes, typeflag, linkname::100-bytes, @magic::binary,
+      mtime::12-bytes, _chksum::8-bytes, typeflag, linkname::100-bytes, magic::6-bytes,
       _version::2-bytes, _uname::32-bytes, _gname::32-bytes, major_device::8-bytes,
       minor_device::8-bytes, prefix::155-bytes, _::12-bytes>> = header_block
+
+    if magic not in @magic do
+      raise "Invalid header magic"
+    end
 
     %Entry{
       path: trim_null(prefix) <> trim_null(filename),
@@ -131,9 +138,10 @@ defmodule TarMerger.TarReader do
   defp typeflag_to_type(?4), do: :block_device
   defp typeflag_to_type(?5), do: :directory
   defp typeflag_to_type(?x), do: :pax_header
+  defp typeflag_to_type(?L), do: :long_name
 
   defp parse_octal(str) do
-    case trim_null(str) do
+    case str |> trim_null() |> trim_trailing_space() do
       <<>> -> 0
       i -> String.to_integer(i, 8)
     end
@@ -142,4 +150,24 @@ defmodule TarMerger.TarReader do
   defp trim_null(str) do
     String.trim_trailing(str, <<0>>)
   end
+
+  defp trim_trailing_space(str) do
+    String.trim_trailing(str, " ")
+  end
+
+  defp resolve_long_names(entries, acc)
+
+  # !! Assumes entries are already in reverse order !!
+  defp resolve_long_names([entry, %Entry{type: :long_name} = prev_entry | tail], acc) do
+    case Entry.read_contents(prev_entry) do
+      {:ok, full_path} ->
+        resolve_long_names(tail, [Entry.put_path(entry, trim_null(full_path)) | acc])
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp resolve_long_names([entry | tail], acc), do: resolve_long_names(tail, [entry | acc])
+  defp resolve_long_names([], acc), do: acc
 end

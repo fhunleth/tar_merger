@@ -16,16 +16,26 @@ defmodule TarMerger.Entry do
             major_device: 0,
             minor_device: 0
 
+  @type entry_type ::
+          :regular
+          | :hard_link
+          | :symlink
+          | :character_device
+          | :block_device
+          | :directory
+          | :pax_header
+          | :long_name
+
   @type t() :: %__MODULE__{
           path: String.t(),
-          contents: nil | {Path.t(), non_neg_integer()} | {File.iodevice(), non_neg_integer()},
-          type: :block_device | :character_device | :directory | :regular | :other | :symlink,
+          contents: nil | {Path.t(), non_neg_integer()} | {File.io_device(), non_neg_integer()},
+          type: entry_type(),
           mode: non_neg_integer(),
           uid: non_neg_integer(),
           gid: non_neg_integer(),
           link: String.t(),
           size: non_neg_integer(),
-          mtime: String.t(),
+          mtime: non_neg_integer(),
           major_device: non_neg_integer(),
           minor_device: non_neg_integer()
         }
@@ -83,6 +93,33 @@ defmodule TarMerger.Entry do
       major_device: Keyword.fetch!(info, :major_device),
       minor_device: Keyword.fetch!(info, :minor_device)
     }
+  end
+
+  @spec put_path(t(), String.t()) :: t()
+  def put_path(entry, path) do
+    %{entry | path: normalize_path(path)}
+  end
+
+  @spec read_contents(t()) :: {:ok, binary() | iolist()} | {:error, :file.posix() | :eof}
+  def read_contents(%__MODULE__{contents: nil}), do: {:ok, <<>>}
+
+  def read_contents(%__MODULE__{contents: {io_device, offset}} = entry) when is_pid(io_device) do
+    case :file.pread(io_device, offset, entry.size) do
+      {:ok, data} -> {:ok, data}
+      :eof -> {:error, :eof}
+      err -> {:error, err}
+    end
+  end
+
+  def read_contents(%__MODULE__{contents: {path, offset}} = entry) when is_binary(path) do
+    with {:ok, file} <- File.open(path, [:read]),
+         {:ok, data} <- :file.pread(file, offset, entry.size) do
+      _ = :file.close(file)
+      {:ok, data}
+    else
+      :eof -> {:error, :eof}
+      err -> err
+    end
   end
 
   defp normalize_mode(mode) do
@@ -176,6 +213,20 @@ defmodule TarMerger.Entry do
     def inspect(%{type: :pax_header} = entry, opts) do
       concat([
         "TarMerger.Entry.pax_header(",
+        Inspect.inspect(entry.path, opts),
+        ", contents: ",
+        Inspect.inspect(entry.contents, opts),
+        ", mode: ",
+        Inspect.inspect(entry.mode, Map.put(opts, :base, :octal)),
+        ", size: ",
+        Inspect.inspect(entry.size, opts),
+        ")"
+      ])
+    end
+
+    def inspect(%{type: :long_name} = entry, opts) do
+      concat([
+        "TarMerger.Entry.long_name(",
         Inspect.inspect(entry.path, opts),
         ", contents: ",
         Inspect.inspect(entry.contents, opts),
